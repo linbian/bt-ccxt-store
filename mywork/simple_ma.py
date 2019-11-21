@@ -119,16 +119,21 @@ if __name__ == '__main__':
     # Datas are in a subfolder of the samples. Need to find where the script is
     # because it could have been called from anywhere
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
-    datapath = os.path.join(modpath, '../datas/orcl-1995-2014.txt')
+    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/orcl-1995-2014.txt')
+    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/COINBASE-BTCUSD-5M.txt')
 
     # Create a Data Feed
-    data = bt.feeds.YahooFinanceCSVData(
+    # data = bt.feeds.YahooFinanceCSVData(
+    data = bt.feeds.BacktraderCSVData(
         dataname=datapath,
+        timeframe=bt.TimeFrame.Minutes,
+        compression=5,
         # Do not pass values before this date
-        fromdate=datetime.datetime(2000, 1, 1),
-        # Do not pass values before this date
-        todate=datetime.datetime(2000, 12, 31),
+        # fromdate=datetime.datetime(2000, 1, 1),
+        # todate=datetime.datetime(2000, 12, 31),
         # Do not pass values after this date
+        fromdate=datetime.datetime(2015, 7, 20),
+        todate=datetime.datetime(2015, 10, 21, 21, 25, 0),
         reverse=False)
 
     # Add the Data Feed to Cerebro
@@ -143,65 +148,11 @@ if __name__ == '__main__':
     # Set the commission
     cerebro.broker.setcommission(commission=0.0)
 
-    # 增加一个分析器
-    cerebro.addanalyzer(bt.analyzers.PyFolio, _name='pyfolio', timeframe=bt.TimeFrame.Years)
-    cerebro.addanalyzer(bt.analyzers.TimeReturn, timeframe=bt.TimeFrame.Years)
-    cerebro.addanalyzer(bt.analyzers.SharpeRatio, timeframe=bt.TimeFrame.Years)
-    cerebro.addanalyzer(bt.analyzers.SQN,)
-    cerebro.addanalyzer(bt.analyzers.Calmar,)
-    # cerebro.addobserver(bt.analyzers.PositionsValue, _name="positions",timeframe=bt.TimeFrame.Years,headers=True, cash=True)
-
     # Print out the starting conditions
     print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
 
     # Run over everything
     strats = cerebro.run()
-
-    # Print out the final result
-    print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
-
-    # 接收第一个策略的分析结果
-    strat = strats[0]
-
-    al = strat.analyzers.timereturn
-    print('-- Time Return:')
-    for k, v in al.get_analysis().items():
-        print('{}: {}'.format(k, v))
-
-    al = strat.analyzers.sharperatio
-    print('-- Sharpe Ratio:')
-    for k, v in al.get_analysis().items():
-        print('{}: {}'.format(k, v))
-
-    al = strat.analyzers.sqn
-    print('-- SQN:')
-    for k, v in al.get_analysis().items():
-        print('{}: {}'.format(k, v))
-
-    al = strat.analyzers.calmar
-    print('-- Calmar:')
-    for k, v in al.get_analysis().items():
-        print('{}: {}'.format(k, v))
-
-    pyfoliozer = strat.analyzers.getbyname('pyfolio')
-    returns, positions, transactions, gross_lev = pyfoliozer.get_pf_items()
-    # print('-- RETURNS')
-    # print(returns)
-    print('-- POSITIONS')
-    print(positions)
-    # print('-- TRANSACTIONS')
-    # print(transactions)
-    # print('-- GROSS LEVERAGE')
-    # print(gross_lev)
-    # import pyfolio as pf
-    # import zipline
-    # zipline.assets
-    # pf.create_full_tear_sheet(
-    #     returns,
-    #     positions=positions,
-    #     transactions=transactions,
-    #     gross_lev=gross_lev,
-    #     round_trips=True)
 
     # Plot the result
     cerebro.plot()

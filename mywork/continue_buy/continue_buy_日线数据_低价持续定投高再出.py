@@ -6,7 +6,9 @@ import os.path  # To manage paths
 import sys  # To find out the script name (in argv[0])
 import math
 import backtrader as bt
-
+import time
+import numpy as np
+from tabulate import tabulate
 
 class TestStrategy(bt.Strategy):
     params = (
@@ -51,6 +53,7 @@ class TestStrategy(bt.Strategy):
         self.sma_month = bt.indicators.SimpleMovingAverage(
             self.datas[0], period=30)
         self.rsi_quarter = bt.talib.RSI(self.datas[0], timeperiod=63)
+        self.ini_cash = self.broker.get_cash()
 
 
     def notify_order(self, order):
@@ -63,22 +66,22 @@ class TestStrategy(bt.Strategy):
         # Attention: broker could reject order if not enough cash
         if order.status in [order.Completed]:
             if order.isbuy():
-                self.log(
-                    'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f,Size:%.2f' %
-                    (order.executed.price,
-                     order.executed.value,
-                     order.executed.comm,
-                     order.executed.size))
+                # self.log(
+                #     'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f,Size:%.2f' %
+                #     (order.executed.price,
+                #      order.executed.value,
+                #      order.executed.comm,
+                #      order.executed.size))
 
                 self.buyprice = order.executed.price
                 self.buycomm = order.executed.comm
                 self.buy_money_already += order.executed.value + order.executed.comm
             else:  # Sell
-                self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f,Size:%.2f' %
-                         (order.executed.price,
-                          order.executed.value,
-                          order.executed.comm,
-                          order.executed.size))
+                # self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f,Size:%.2f' %
+                #          (order.executed.price,
+                #           order.executed.value,
+                #           order.executed.comm,
+                #           order.executed.size))
                 posValue = self.broker.getvalue() - self.broker.get_cash()
                 if posValue == 0:
                     self.buy_money_already = 0
@@ -97,8 +100,8 @@ class TestStrategy(bt.Strategy):
         if not trade.isclosed:
             return
 
-        self.log('OPERATION PROFIT, GROSS %.2f, NET %.2f' %
-                 (trade.pnl, trade.pnlcomm))
+        # self.log('OPERATION PROFIT, GROSS %.2f, NET %.2f' %
+        #          (trade.pnl, trade.pnlcomm))
 
     def next(self):
         #1、买：上根bar收盘价 < 年均线 且 rsi值 < rsi_low
@@ -132,23 +135,71 @@ class TestStrategy(bt.Strategy):
             self.getsizer().setsizing(self.size_continue_sell)
             self.order = self.sell()
             self.buy_lastdays_already = -1
-            self.log('today can sell, now buy_money_already = %.2f' %
-                     (self.buy_money_already))
+            # self.log('today can sell, now buy_money_already = %.2f' %
+            #          (self.buy_money_already))
 
         self.buy_lastdays_already += 1
 
     def stop(self):
-        print("最大连续投入金额为：{}".format(self.max_continue_buy_amount))
-        print("最大连续买入天数为：{}".format(self.max_continue_buy_days))
-        final_value = cerebro.broker.getvalue()
-        returns = (final_value - self.max_continue_buy_amount) / self.max_continue_buy_amount
-        print("最大连续投入金额：{}，期末市值：{}，回报率：{}".format(self.max_continue_buy_amount,final_value,returns))
+        # print("最大连续投入金额为：{}".format(self.max_continue_buy_amount))
+        # print("最大连续买入天数为：{}".format(self.max_continue_buy_days))
+        finalValue = self.broker.getvalue()
+        finalCash =  self.broker.get_cash()
+        finalPositionSize = self.broker.getposition(self.data0).size
+        finalPositionPrice = self.broker.getposition(self.data0).price
+        finalPositionValue = finalPositionSize * finalPositionPrice
+        invest_return_money =  finalValue - self.ini_cash
+        invest_return_ratio = invest_return_money / self.ini_cash
+        # returns = (final_value - self.max_continue_buy_amount -10000000) / self.max_continue_buy_amount
+        # print("最大连续投入金额：{}，期末市值：{}，回报率：{}".format(self.max_continue_buy_amount,final_value,returns))
+        # print(self.params.rsi_low,)
+
+        # table_header = ['maperiod','least_buy_days','target_returns','continue_sell_day','rsi_low','rsi_high']
+        # table_data = [(self.p.maperiod,self.p.maperiod,self.p.target_returns,self.p.continue_sell_day,self.p.rsi_low,self.p.rsi_high)]
+        # print(tabulate(table_data, headers=table_header, tablefmt='plain'))
+        if self.max_continue_buy_amount > 0 :
+            efficiency = invest_return_money/self.max_continue_buy_amount
+        else:
+            efficiency = 0
+
+        table_header = ['least_buy_days','target_returns','continue_sell_day','rsi_low','rsi_high',
+                        '最大连续投入','最大连续天数','初始资金', '当前总市值','总盈利金额','总回报率','总盈利金额/最大连续投入']
+        table_data = [(self.p.least_buy_days,self.p.target_returns,self.p.continue_sell_day,self.p.rsi_low,self.p.rsi_high,
+                       self.max_continue_buy_amount,self.max_continue_buy_days,self.ini_cash,finalValue,invest_return_money,invest_return_ratio,efficiency)]
+        print(tabulate(table_data, headers=table_header, tablefmt='plain'))
+        # print(tabulate(table_data, tablefmt='plain'))
 
 
 if __name__ == '__main__':
 
+
+    # Create a cerebro entity
+    # cerebro = bt.Cerebro(maxcpus=4,
+    #                      runonce=True,
+    #                      exactbars=0,
+    #                      optdatas=True,
+    #                      optreturn=True)
+    #
+    # # Add a strategy
+    # cerebro.optstrategy(
+    #     TestStrategy,
+    #     least_buy_days=range(30,70,3),
+    #     target_returns=np.arange(0.1, 0.51, 0.03),
+    #     continue_sell_day=range(10,50,3),
+    #     rsi_low = np.arange(40,55,2.5),
+    #     rsi_high= np.arange(55,72,2.5)
+    #     )
+
     cerebro = bt.Cerebro()
-    cerebro.addstrategy(TestStrategy)
+    cerebro.addstrategy(TestStrategy,
+                        maperiod=22,
+                        buy_money_already=0,
+                        buy_amount_once=5000,
+                        least_buy_days=66,
+                        target_returns=0.13,
+                        continue_sell_day=22,
+                        rsi_low=50,
+                        rsi_high=67.5)
 
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/orcl-1995-2014.txt')
@@ -172,9 +223,25 @@ if __name__ == '__main__':
 
     mycommission = 0.001
     cerebro.broker.setcommission(commission=mycommission)
+    tstart = time.clock()
     strats = cerebro.run(tradehistory=True)
-
     cerebro.plot()
     # cerebro.plot(start=datetime.date(2015, 7, 20), end=datetime.date(2015, 8, 1))
     # cerebro.plot(start=1, end=2400)
     # cerebro.plot(start=1201, end=2400)
+    # clock the start of the process
+    # stratruns = cerebro.run(tradehistory=True)
+
+    # clock the end of the process
+    tend = time.clock()
+
+    # print('==================================================')
+    # for stratrun in stratruns:
+    #     print('**************************************************')
+    #     for strat in stratrun:
+    #         print('--------------------------------------------------')
+    #         print(strat.p._getkwargs())
+    # print('==================================================')
+
+    # print out the result
+    print('Time used:', str(tend - tstart))

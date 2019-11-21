@@ -14,9 +14,9 @@ class TestStrategy(bt.Strategy):
         ('buy_money_already',0),
         ('buy_amount_once',5000),
         ('least_buy_days',66),
-        ('target_returns',0.2),
-        ('continue_sell_day',10),
-
+        ('target_returns',0.5),
+        ('continue_sell_day',20),
+        ('resample_factor',6),
     )
 
     def log(self, txt, dt=None):
@@ -37,12 +37,21 @@ class TestStrategy(bt.Strategy):
         self.buycomm = None
         self.flag_continue_buy =  True
         self.flag_continue_sell =  False
+        self.buy_lastdays_already = 0
         self.buy_money_already = self.params.buy_money_already
         self.buy_amount_once = self.params.buy_amount_once
         self.least_buy_money = self.buy_amount_once * self.params.least_buy_days
         self.target_returns = self.params.target_returns
         self.size_continue_sell = 0
+        self.max_continue_buy_amount = 0
+        self.max_continue_buy_days = 0
 
+    def start(self):
+        self.counter = 0
+
+    def prenext(self):
+        self.counter += 1
+        print('prenext len %d - counter %d' % (len(self), self.counter))
 
     def notify_order(self, order):
         if order.status in [order.Submitted, order.Accepted]:
@@ -54,12 +63,12 @@ class TestStrategy(bt.Strategy):
         # Attention: broker could reject order if not enough cash
         if order.status in [order.Completed]:
             if order.isbuy():
-                self.log(
-                    'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f,Size:%.2f' %
-                    (order.executed.price,
-                     order.executed.value,
-                     order.executed.comm,
-                     order.executed.size))
+                # self.log(
+                #     'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f,Size:%.2f' %
+                #     (order.executed.price,
+                #      order.executed.value,
+                #      order.executed.comm,
+                #      order.executed.size))
 
                 self.buyprice = order.executed.price
                 self.buycomm = order.executed.comm
@@ -92,8 +101,10 @@ class TestStrategy(bt.Strategy):
                  (trade.pnl, trade.pnlcomm))
 
     def next(self):
-        if self.order:
+        self.counter += 1
+        if self.order or self.counter % self.params.resample_factor > 0:
             return
+        # print('next:datas[1] len %d,counter is %d' % (len(self.datas[1]),self.counter))
 
         posValue = self.broker.getvalue() - self.broker.get_cash()
         currentReturns = 0
@@ -107,49 +118,62 @@ class TestStrategy(bt.Strategy):
             buy_flag = False
             self.flag_continue_buy = False
             self.flag_continue_sell = True
+            self.max_continue_buy_amount = max(self.max_continue_buy_amount, self.buy_money_already)
+            self.max_continue_buy_days = max(self.buy_lastdays_already, self.max_continue_buy_days)
+            self.buy_lastdays_already = -1
             self.log('stop continue buy,now buy_money_already = %.2f' %
                      (self.buy_money_already))
 
+        self.buy_lastdays_already += 1
         if buy_flag == True and self.flag_continue_buy ==  True:
-            buy_size = math.floor(self.buy_amount_once / self.dataclose[0]*(1+0.05))
+            buy_size = math.floor(self.buy_amount_once / self.dataclose[0]*(1+0.05) * 1000) / 1000
             self.getsizer().setsizing(buy_size)
             self.order = self.buy()
 
 
         if self.flag_continue_sell == True:
-            new_size  = math.floor(self.broker.getposition(self.data0).size / self.params.continue_sell_day)
+            new_size  = math.floor(self.broker.getposition(self.data0).size / self.params.continue_sell_day * 1000)/1000
             self.size_continue_sell = max(new_size, self.size_continue_sell)
             if self.size_continue_sell > self.broker.getposition(self.data0).size:
                 self.size_continue_sell = self.broker.getposition(self.data0).size
             self.getsizer().setsizing(self.size_continue_sell)
             self.order = self.sell()
+            self.buy_lastdays_already = -1
 
+    def stop(self):
+        print("最大连续投入金额为：{}".format(self.max_continue_buy_amount))
+        print("最大连续买入天数为：{}".format(self.max_continue_buy_days))
 
 if __name__ == '__main__':
-
+    resample_factor = 1440
+    data0_compression = 5
     cerebro = bt.Cerebro()
-    cerebro.addstrategy(TestStrategy)
+    cerebro.addstrategy(TestStrategy,
+                        maperiod=22,
+                        buy_money_already=0,
+                        buy_amount_once=10,
+                        least_buy_days=66,
+                        target_returns=0.2,
+                        continue_sell_day=10,
+                        resample_factor=resample_factor/data0_compression)
 
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
-    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/orcl-1995-2014.txt')
-    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.txt')
-    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/COINBASE-BTCUSD-5M.txt')
+    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/COINBASE-BTCUSD-5M.txt')
 
     data =   bt.feeds.BacktraderCSVData(
         dataname=datapath,
-        # timeframe=bt.TimeFrame.Days,
         timeframe=bt.TimeFrame.Minutes,
-        compression=5,
+        compression=data0_compression,
         # fromdate=datetime.datetime(2015, 7, 20),
         # todate=datetime.datetime(2015, 10, 21, 21, 25, 0),
         reverse=False)
     cerebro.adddata(data)
 
-    # 合并为日线
-    # cerebro.resampledata(data,
-    #                              timeframe=bt.TimeFrame.Minutes,
-    #                              compression=1440)
-    init_value = 10000000
+    # resample分钟线
+    cerebro.resampledata(data,
+                         timeframe=bt.TimeFrame.Minutes,
+                         compression=resample_factor)
+    init_value = 20000
     cerebro.broker.setcash(init_value)
 
     # Add a FixedSize sizer according to the stake

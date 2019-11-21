@@ -32,10 +32,10 @@ class TestStrategy(bt.Strategy):
 
     def __init__(self):
         # Keep a reference to the "close" line in the data[0] dataseries
-        self.dataclose = self.datas[1].close
-        self.dataopen = self.datas[1].open
-        self.datalow = self.datas[1].low
-        self.datahigh = self.datas[1].high
+        self.dataclose = self.datas[0].close
+        self.dataopen = self.datas[0].open
+        self.datalow = self.datas[0].low
+        self.datahigh = self.datas[0].high
 
         # To keep track of pending orders and buy price/commission
         self.order = None
@@ -51,11 +51,13 @@ class TestStrategy(bt.Strategy):
         self.size_continue_sell = 0
         self.max_continue_buy_amount = 0
         self.max_continue_buy_days = 0
+        self.continue_sell_flag = False
+
         self.sma_slow = bt.indicators.SimpleMovingAverage(
-            self.dataclose, period=self.params.sma_slow)
+            self.dataclose, period=self.params.sma_slow * self.params.resample_factor)
         self.sma_days_sell = bt.indicators.SimpleMovingAverage(
-            self.dataclose, period=self.params.sma_days_sell)
-        self.rsi_quarter = bt.talib.RSI(self.dataclose, timeperiod=63)
+            self.dataclose, period=self.params.sma_days_sell * self.params.resample_factor)
+        self.rsi_quarter = bt.talib.RSI(self.dataclose, timeperiod=61)
         self.ini_cash = self.broker.get_cash()
 
     def start(self):
@@ -87,14 +89,15 @@ class TestStrategy(bt.Strategy):
                 self.buycomm = order.executed.comm
                 self.buy_money_already += order.executed.value + order.executed.comm
             else:  # Sell
-                # self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f,Size:%.2f' %
-                #          (order.executed.price,
-                #           order.executed.value,
-                #           order.executed.comm,
-                #           order.executed.size))
+                self.log('SELL EXECUTED, Price: %.3f, Cost: %.3f, Comm %.3f,Size:%.3f' %
+                         (order.executed.price,
+                          order.executed.value,
+                          order.executed.comm,
+                          order.executed.size))
                 posValue = self.broker.getvalue() - self.broker.get_cash()
                 if posValue == 0:
                     self.buy_money_already = 0
+                    self.continue_sell_flag = False
                 else:
                     self.buy_money_already = self.buy_money_already - order.executed.value + order.executed.comm
 
@@ -118,7 +121,15 @@ class TestStrategy(bt.Strategy):
         #2、卖：上跟bar收盘价 > 月均线 且 rsi值 > rsi_high
         #3、其他时候观望
         self.counter += 1
-        if self.order or self.counter % self.params.resample_factor > 0:
+        # print(self.counter)
+        if self.order:
+            return
+
+        if self.counter % self.params.resample_factor > 0 and self.continue_sell_flag == False:
+            return
+
+        if self.continue_sell_flag == True:
+            self.execute_sell()
             return
 
         posValue = self.broker.getvalue() - self.broker.get_cash()
@@ -145,20 +156,24 @@ class TestStrategy(bt.Strategy):
                 and self.broker.getposition(self.data0).size > 0 \
                 and currentReturns > self.target_returns \
                 and self.buy_lastdays_already > self.params.least_buy_days:
-            self.max_continue_buy_amount = max(self.max_continue_buy_amount, self.buy_money_already)
-            self.max_continue_buy_days = max(self.buy_lastdays_already, self.max_continue_buy_days)
-            self.buy_lastdays_already = -1
-            new_size  = math.floor(self.broker.getposition(self.data0).size / self.params.continue_sell_times * 1000) / 1000
-            self.size_continue_sell = max(new_size, self.size_continue_sell)
-            if self.size_continue_sell > self.broker.getposition(self.data0).size:
-                self.size_continue_sell = self.broker.getposition(self.data0).size
-            self.getsizer().setsizing(self.size_continue_sell)
-            self.order = self.sell()
-            self.buy_lastdays_already = -1
-            # self.log('today can sell, now buy_money_already = %.2f' %
-            #          (self.buy_money_already))
+            self.execute_sell()
 
         self.buy_lastdays_already += 1
+
+    def execute_sell(self):
+        self.continue_sell_flag = True
+        self.max_continue_buy_amount = max(self.max_continue_buy_amount, self.buy_money_already)
+        self.max_continue_buy_days = max(self.buy_lastdays_already, self.max_continue_buy_days)
+        self.buy_lastdays_already = -1
+        new_size  = math.floor(self.broker.getposition(self.data0).size / self.params.continue_sell_times * 1000) / 1000
+        self.size_continue_sell = max(new_size, self.size_continue_sell)
+        if self.size_continue_sell > self.broker.getposition(self.data0).size:
+            self.size_continue_sell = self.broker.getposition(self.data0).size
+        self.getsizer().setsizing(self.size_continue_sell)
+        self.order = self.sell()
+        self.buy_lastdays_already = -1
+        self.log('today can sell, now buy_money_already = %.2f' %
+                 (self.buy_money_already))
 
     def stop(self):
         # print("最大连续投入金额为：{}".format(self.max_continue_buy_amount))
@@ -196,38 +211,37 @@ if __name__ == '__main__':
     resample_factor = 1440
     data0_compression = 5
     # Create a cerebro entity
-    cerebro = bt.Cerebro(maxcpus=4,
-                         runonce=True,
-                         exactbars=0,
-                         optdatas=True,
-                         optreturn=True)
-
-    # Add a strategy
-    cerebro.optstrategy(
-        TestStrategy,
-        buy_amount_once=10,
-        least_buy_days=range(30,70,10),
-        target_returns=np.arange(0.2, 0.6, 0.1),
-        continue_sell_times=range(15,40,5),
-        rsi_low = np.arange(50,60,3),
-        rsi_high= np.arange(60,80,3),
-        sma_days_sell= range(5,21,3),
-        sma_slow = range(40,360,20),
-        resample_factor=resample_factor/data0_compression
-    )
-    # cerebro = bt.Cerebro()
-    # cerebro.addstrategy(TestStrategy,
-    #                     maperiod=22,
-    #                     buy_money_already=0,
-    #                     buy_amount_once=10,
-    #                     least_buy_days=66,
-    #                     target_returns=0.2,
-    #                     continue_sell_times=10,
-    #                     rsi_low=50,
-    #                     rsi_high=70,
-    #                     sma_days_sell=10,
-    #                     sma_slow=60,
-    #                     resample_factor=resample_factor/data0_compression)
+    # cerebro = bt.Cerebro(maxcpus=4,
+    #                      runonce=True,
+    #                      exactbars=0,
+    #                      optdatas=True,
+    #                      optreturn=True)
+    #
+    # # Add a strategy
+    # cerebro.optstrategy(
+    #     TestStrategy,
+    #     buy_amount_once=10,
+    #     least_buy_days=range(30,70,10),
+    #     target_returns=np.arange(0.2, 0.6, 0.1),
+    #     continue_sell_times=range(15,40,5),
+    #     rsi_low = np.arange(50,60,3),
+    #     rsi_high= np.arange(60,80,3),
+    #     sma_days_sell= range(5,21,3),
+    #     sma_slow = range(40,360,20),
+    #     resample_factor=resample_factor/data0_compression
+    # )
+    cerebro = bt.Cerebro()
+    cerebro.addstrategy(TestStrategy,
+                        buy_money_already=0,
+                        buy_amount_once=10,
+                        least_buy_days=66,
+                        target_returns=0.2,
+                        continue_sell_times=10,
+                        rsi_low=47,
+                        rsi_high=59,
+                        sma_days_sell=10,
+                        sma_slow=60,
+                        resample_factor=int(resample_factor/data0_compression))
 
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
     datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/COINBASE-BTCUSD-5M.txt')
@@ -241,9 +255,9 @@ if __name__ == '__main__':
         reverse=False)
     cerebro.adddata(data)
 
-    cerebro.resampledata(data,
-                     timeframe=bt.TimeFrame.Minutes,
-                     compression=resample_factor)
+    # cerebro.resampledata(data,
+    #                  timeframe=bt.TimeFrame.Minutes,
+    #                  compression=resample_factor)
 
     init_value = 5000
     cerebro.broker.setcash(init_value)
@@ -260,7 +274,7 @@ if __name__ == '__main__':
     # final_value = cerebro.broker.getvalue()
     # returns = (final_value - init_value) / init_value
     # print("初始市值：{}，期末市值：{}，回报率：{}".format(init_value,final_value,returns))
-    # cerebro.plot()
+    cerebro.plot()
     # cerebro.plot(start=datetime.date(2015, 7, 20), end=datetime.date(2015, 8, 1))
     # cerebro.plot(start=1, end=2400)
     # cerebro.plot(start=1201, end=2400)

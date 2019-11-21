@@ -4,14 +4,8 @@ from __future__ import (absolute_import, division, print_function,
 import datetime  # For datetime objects
 import os.path  # To manage paths
 import sys  # To find out the script name (in argv[0])
-
-# Import the backtrader platform
+import math
 import backtrader as bt
-from tabulate import tabulate
-
-
-# Create a Stratey
-from mywork import myAnalyzer
 
 
 class TestStrategy(bt.Strategy):
@@ -37,18 +31,27 @@ class TestStrategy(bt.Strategy):
         self.buycomm = None
 
         # Add a MovingAverageSimple indicator
-        self.sma_min = bt.indicators.SimpleMovingAverage(
-            self.datas[0], period=60)
-
-        # self.sma_max = bt.indicators.SimpleMovingAverage(
+        # self.sma_min = bt.indicators.SimpleMovingAverage(
+        #     self.datas[0], period=60)
+        #
+        # self.sma_mid = bt.indicators.SimpleMovingAverage(
         #     self.datas[1], period=5)
+        #
+        # self.sma_max = bt.indicators.SimpleMovingAverage(
+        #     self.datas[2], period=5)
 
         # Indicators for the plotting show
-        self.boll = bt.indicators.BollingerBands(self.datas[0], period=self.params.maperiod)
+        self.boll_min = bt.indicators.BollingerBands(self.datas[0], period=self.params.maperiod)
+        # self.boll_mid = bt.indicators.BollingerBands(self.datas[1], period=self.params.maperiod)
+        self.boll_max = bt.indicators.BollingerBands(self.datas[1], period=self.params.maperiod)
         # bt.indicators.ExponentialMovingAverage(self.datas[0], period=self.params.maperiod)
-        # bt.indicators.MACDHisto(self.datas[0])
+        self.macd_min = bt.indicators.MACDHisto(self.datas[0])
+        self.macd_max = bt.indicators.MACDHisto(self.datas[1])
+        self.rsi_min = bt.indicators.RSI(self.datas[0])
+        self.rsi_max = bt.indicators.RSI(self.datas[1])
         # rsi = bt.indicators.RSI(self.datas[0])
         # bt.indicators.ATR(self.datas[0], plot=False)
+
 
     def notify_order(self, order):
         if order.status in [order.Submitted, order.Accepted]:
@@ -102,7 +105,7 @@ class TestStrategy(bt.Strategy):
         if not self.position:
             # Not yet ... we MIGHT BUY if ...
             # if self.dataclose[0] > self.sma[0]:
-            if self.dataclose[0] > self.boll.top[0] and self.dataclose[-1] < self.boll.top[-1]:
+            if self.dataclose[0] > self.boll_max.top[0] and self.dataclose[-1] < self.boll_max.top[-1]:
                 # BUY, BUY, BUY!!! (with all possible default parameters)
                 self.log('BUY CREATE, %.2f' % self.dataclose[0])
 
@@ -111,7 +114,7 @@ class TestStrategy(bt.Strategy):
                 self.order = self.buy()
 
         else:
-            if self.dataclose[0] < self.boll.bot[0] and self.dataclose[-1] > self.boll.bot[-1]:
+            if self.dataclose[0] < self.boll_max.bot[0] and self.dataclose[-1] > self.boll_max.bot[-1]:
                 # SELL, SELL, SELL!!! (with all possible default parameters)
                 self.log('SELL CREATE, %.2f' % self.dataclose[0])
 
@@ -132,7 +135,7 @@ if __name__ == '__main__':
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
     # datapath = os.path.join(modpath, '../datas/orcl-1995-2014.txt')
     # datapath = os.path.join(modpath, '../datas/BTC-USD-1D-coinbase-converted-date.txt')
-    datapath = os.path.join(modpath, '../datas/COINBASE-BTCUSD-5M.txt')
+    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/COINBASE-BTCUSD-5M.txt')
 
     # Create a Data Feed
     # data = bt.feeds.YahooFinanceCSVData(
@@ -150,7 +153,18 @@ if __name__ == '__main__':
     #     compression=1,
     #     reverse=False)
 
+
     cerebro.adddata(data)
+
+    # cerebro.resampledata(data,
+    #                      timeframe=bt.TimeFrame.Minutes,
+    #                      compression=30)
+
+    data1 = cerebro.resampledata(data,
+                         timeframe=bt.TimeFrame.Minutes,
+                         compression=30)
+    data1.plotinfo.sameaxis = True
+
 
     # Set our desired cash start
     cerebro.broker.setcash(10000.0)
@@ -162,11 +176,6 @@ if __name__ == '__main__':
     mycommission = 0.001
     cerebro.broker.setcommission(commission=mycommission)
 
-
-    # 添加性能分析器
-    # cerebro.addanalyzer(bt.analyzers.PyFolio, _name='pyfolio',timeframe=bt.TimeFrame.Minutes, compression=5)
-    cerebro.addanalyzer(bt.analyzers.trade_list, _name='trade_list')
-
     # 添加观察者
     # cerebro.addobserver(bt.observers.DrawDown)
 
@@ -174,4 +183,8 @@ if __name__ == '__main__':
     strats = cerebro.run(tradehistory=True)
 
     # Plot the result
-    cerebro.plot()
+    # cerebro.plot()
+    # cerebro.plot(start=datetime.date(2015, 7, 20), end=datetime.date(2015, 8, 1))
+
+    cerebro.plot(start=1, end=2400)
+    # cerebro.plot(start=1201, end=2400)

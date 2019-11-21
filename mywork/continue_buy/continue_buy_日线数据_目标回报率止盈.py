@@ -37,11 +37,14 @@ class TestStrategy(bt.Strategy):
         self.buycomm = None
         self.flag_continue_buy =  True
         self.flag_continue_sell =  False
+        self.buy_lastdays_already = 0
         self.buy_money_already = self.params.buy_money_already
         self.buy_amount_once = self.params.buy_amount_once
         self.least_buy_money = self.buy_amount_once * self.params.least_buy_days
         self.target_returns = self.params.target_returns
         self.size_continue_sell = 0
+        self.max_continue_buy_amount = 0
+        self.max_continue_buy_days = 0
 
 
     def notify_order(self, order):
@@ -107,9 +110,13 @@ class TestStrategy(bt.Strategy):
             buy_flag = False
             self.flag_continue_buy = False
             self.flag_continue_sell = True
+            self.max_continue_buy_amount = max(self.max_continue_buy_amount, self.buy_money_already)
+            self.max_continue_buy_days = max(self.buy_lastdays_already, self.max_continue_buy_days)
+            self.buy_lastdays_already = -1
             self.log('stop continue buy,now buy_money_already = %.2f' %
                      (self.buy_money_already))
 
+        self.buy_lastdays_already += 1
         if buy_flag == True and self.flag_continue_buy ==  True:
             buy_size = math.floor(self.buy_amount_once / self.dataclose[0]*(1+0.05))
             self.getsizer().setsizing(buy_size)
@@ -123,6 +130,14 @@ class TestStrategy(bt.Strategy):
                 self.size_continue_sell = self.broker.getposition(self.data0).size
             self.getsizer().setsizing(self.size_continue_sell)
             self.order = self.sell()
+            self.buy_lastdays_already = -1
+
+    def stop(self):
+        print("最大连续投入金额为：{}".format(self.max_continue_buy_amount))
+        print("最大连续买入天数为：{}".format(self.max_continue_buy_days))
+        final_value = cerebro.broker.getvalue()
+        returns = (final_value - self.max_continue_buy_amount) / self.max_continue_buy_amount
+        print("最大连续投入金额：{}，期末市值：{}，回报率：{}".format(self.max_continue_buy_amount,final_value,returns))
 
 
 if __name__ == '__main__':
@@ -137,18 +152,12 @@ if __name__ == '__main__':
 
     data =   bt.feeds.BacktraderCSVData(
         dataname=datapath,
-        # timeframe=bt.TimeFrame.Days,
-        timeframe=bt.TimeFrame.Minutes,
-        compression=5,
+        timeframe=bt.TimeFrame.Days,
         # fromdate=datetime.datetime(2015, 7, 20),
         # todate=datetime.datetime(2015, 10, 21, 21, 25, 0),
         reverse=False)
     cerebro.adddata(data)
 
-    # 合并为日线
-    # cerebro.resampledata(data,
-    #                              timeframe=bt.TimeFrame.Minutes,
-    #                              compression=1440)
     init_value = 10000000
     cerebro.broker.setcash(init_value)
 
