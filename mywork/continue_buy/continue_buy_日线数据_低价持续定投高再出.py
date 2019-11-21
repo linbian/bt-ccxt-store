@@ -54,6 +54,7 @@ class TestStrategy(bt.Strategy):
             self.datas[0], period=30)
         self.rsi_quarter = bt.talib.RSI(self.datas[0], timeperiod=63)
         self.ini_cash = self.broker.get_cash()
+        self.continue_sell_flag = False
 
 
     def notify_order(self, order):
@@ -85,6 +86,7 @@ class TestStrategy(bt.Strategy):
                 posValue = self.broker.getvalue() - self.broker.get_cash()
                 if posValue == 0:
                     self.buy_money_already = 0
+                    self.continue_sell_flag = False
                 else:
                     self.buy_money_already = self.buy_money_already - order.executed.value + order.executed.comm
 
@@ -115,7 +117,7 @@ class TestStrategy(bt.Strategy):
         if self.buy_money_already > 0:
             currentReturns = (posValue - self.buy_money_already) / self.buy_money_already
 
-        if self.dataclose[0] < self.sma_year[0] and self.rsi_quarter[0] < self.params.rsi_low:
+        if self.dataclose[0] < self.sma_year[0] and self.rsi_quarter[0] < self.params.rsi_low and self.continue_sell_flag == False:
             buy_size = math.floor(self.buy_amount_once / self.dataclose[0]*(1+0.05))
             self.getsizer().setsizing(buy_size)
             self.order = self.buy()
@@ -124,7 +126,9 @@ class TestStrategy(bt.Strategy):
                 and self.rsi_quarter[0] > self.params.rsi_high \
                 and self.broker.getposition(self.data0).size > 0 \
                 and currentReturns > self.target_returns \
-                and self.buy_lastdays_already > self.params.least_buy_days:
+                and self.buy_lastdays_already > self.params.least_buy_days\
+                or self.continue_sell_flag == True:
+            self.continue_sell_flag = True
             self.max_continue_buy_amount = max(self.max_continue_buy_amount, self.buy_money_already)
             self.max_continue_buy_days = max(self.buy_lastdays_already, self.max_continue_buy_days)
             self.buy_lastdays_already = -1
@@ -163,9 +167,9 @@ class TestStrategy(bt.Strategy):
             efficiency = 0
 
         table_header = ['least_buy_days','target_returns','continue_sell_day','rsi_low','rsi_high',
-                        '最大连续投入','最大连续天数','初始资金', '当前总市值','总盈利金额','总回报率','总盈利金额/最大连续投入']
+                        '最大连续投入','最大连续bar数','初始资金', '当前总市值','当前仓位','总盈利金额','总回报率','总盈利金额/最大连续投入']
         table_data = [(self.p.least_buy_days,self.p.target_returns,self.p.continue_sell_day,self.p.rsi_low,self.p.rsi_high,
-                       self.max_continue_buy_amount,self.max_continue_buy_days,self.ini_cash,finalValue,invest_return_money,invest_return_ratio,efficiency)]
+                       self.max_continue_buy_amount,self.max_continue_buy_days,self.ini_cash,finalValue,finalPositionValue,invest_return_money,invest_return_ratio,efficiency)]
         print(tabulate(table_data, headers=table_header, tablefmt='plain'))
         # print(tabulate(table_data, tablefmt='plain'))
 
@@ -203,13 +207,17 @@ if __name__ == '__main__':
 
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/orcl-1995-2014.txt')
-    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/yhoo-1996-2014.txt')
+    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/yhoo-1996-2014.txt')
+    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.data')
+    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1H-coinbase-converted-datetime.data')
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.txt')
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/COINBASE-BTCUSD-5M.txt')
 
     data =   bt.feeds.BacktraderCSVData(
         dataname=datapath,
-        timeframe=bt.TimeFrame.Days,
+        # timeframe=bt.TimeFrame.Days,
+        timeframe=bt.TimeFrame.Minutes,
+        compression=60,
         # fromdate=datetime.datetime(2015, 7, 20),
         # todate=datetime.datetime(2015, 10, 21, 21, 25, 0),
         reverse=False)
