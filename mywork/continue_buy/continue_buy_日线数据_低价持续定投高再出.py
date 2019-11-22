@@ -20,6 +20,7 @@ class TestStrategy(bt.Strategy):
         ('continue_sell_day',20),
         ('rsi_low',45),
         ('rsi_high',60),
+        ('rsi_period',500)
     )
 
     def log(self, txt, dt=None):
@@ -52,7 +53,7 @@ class TestStrategy(bt.Strategy):
             self.datas[0], period=126)
         self.sma_month = bt.indicators.SimpleMovingAverage(
             self.datas[0], period=30)
-        self.rsi_quarter = bt.talib.RSI(self.datas[0], timeperiod=63)
+        self.rsi_quarter = bt.talib.RSI(self.datas[0], timeperiod=self.params.rsi_period)
         self.ini_cash = self.broker.get_cash()
         self.continue_sell_flag = False
 
@@ -117,8 +118,9 @@ class TestStrategy(bt.Strategy):
         if self.buy_money_already > 0:
             currentReturns = (posValue - self.buy_money_already) / self.buy_money_already
 
-        if self.dataclose[0] < self.sma_year[0] and self.rsi_quarter[0] < self.params.rsi_low and self.continue_sell_flag == False:
-            buy_size = math.floor(self.buy_amount_once / self.dataclose[0]*(1+0.05))
+        # if self.dataclose[0] < self.sma_year[0] and self.rsi_quarter[0] < self.params.rsi_low and self.continue_sell_flag == False:
+        if self.rsi_quarter[0] < self.params.rsi_low and self.continue_sell_flag == False:
+            buy_size = math.floor(self.buy_amount_once / self.dataclose[0]*(1+0.05)* 1000) / 1000
             self.getsizer().setsizing(buy_size)
             self.order = self.buy()
 
@@ -132,7 +134,7 @@ class TestStrategy(bt.Strategy):
             self.max_continue_buy_amount = max(self.max_continue_buy_amount, self.buy_money_already)
             self.max_continue_buy_days = max(self.buy_lastdays_already, self.max_continue_buy_days)
             self.buy_lastdays_already = -1
-            new_size  = math.floor(self.broker.getposition(self.data0).size / self.params.continue_sell_day)
+            new_size  = math.floor(self.broker.getposition(self.data0).size / self.params.continue_sell_day* 1000) / 1000
             self.size_continue_sell = max(new_size, self.size_continue_sell)
             if self.size_continue_sell > self.broker.getposition(self.data0).size:
                 self.size_continue_sell = self.broker.getposition(self.data0).size
@@ -198,12 +200,13 @@ if __name__ == '__main__':
     cerebro.addstrategy(TestStrategy,
                         maperiod=22,
                         buy_money_already=0,
-                        buy_amount_once=20,
+                        buy_amount_once=10,
                         least_buy_days=66,
                         target_returns=0.13,
                         continue_sell_day=22,
-                        rsi_low=50,
-                        rsi_high=67.5)
+                        rsi_low=47.5,
+                        rsi_high=63,
+                        rsi_period=40)
 
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/orcl-1995-2014.txt')
@@ -223,7 +226,7 @@ if __name__ == '__main__':
         reverse=False)
     cerebro.adddata(data)
 
-    init_value = 5000
+    init_value = 50000
     cerebro.broker.setcash(init_value)
 
     # Add a FixedSize sizer according to the stake
