@@ -204,15 +204,15 @@ if __name__ == '__main__':
                         least_buy_days=66,
                         target_returns=0.13,
                         continue_sell_day=22,
-                        rsi_low=47.5,
+                        rsi_low=45,
                         rsi_high=63,
-                        rsi_period=40)
+                        rsi_period=250)
 
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/orcl-1995-2014.txt')
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/yhoo-1996-2014.txt')
-    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.data')
-    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1H-coinbase-converted-datetime.data')
+    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.data')
+    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1H-coinbase-converted-datetime.data')
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.txt')
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/COINBASE-BTCUSD-5M.txt')
 
