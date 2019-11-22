@@ -190,15 +190,15 @@ if __name__ == '__main__':
     #     least_buy_days=range(30,70,3),
     #     target_returns=np.arange(0.1, 0.51, 0.03),
     #     continue_sell_day=range(10,50,3),
-    #     rsi_low = np.arange(40,55,2.5),
-    #     rsi_high= np.arange(55,72,2.5)
+    #     rsi_low = np.arange(30,55,2.5),
+    #     rsi_high= np.arange(60,80,2.5)
     #     )
 
     cerebro = bt.Cerebro()
     cerebro.addstrategy(TestStrategy,
                         maperiod=22,
                         buy_money_already=0,
-                        buy_amount_once=5000,
+                        buy_amount_once=20,
                         least_buy_days=66,
                         target_returns=0.13,
                         continue_sell_day=22,
@@ -208,22 +208,22 @@ if __name__ == '__main__':
     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/orcl-1995-2014.txt')
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/yhoo-1996-2014.txt')
-    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.data')
-    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1H-coinbase-converted-datetime.data')
+    datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.data')
+    # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1H-coinbase-converted-datetime.data')
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/BTC-USD-1D-coinbase-converted-date.txt')
     # datapath = os.path.join(modpath, 'F:/git_repo/backtrader-ccxt/datas/COINBASE-BTCUSD-5M.txt')
 
     data =   bt.feeds.BacktraderCSVData(
         dataname=datapath,
-        # timeframe=bt.TimeFrame.Days,
-        timeframe=bt.TimeFrame.Minutes,
-        compression=60,
+        timeframe=bt.TimeFrame.Days,
+        # timeframe=bt.TimeFrame.Minutes,
+        # compression=1,
         # fromdate=datetime.datetime(2015, 7, 20),
         # todate=datetime.datetime(2015, 10, 21, 21, 25, 0),
         reverse=False)
     cerebro.adddata(data)
 
-    init_value = 10000000
+    init_value = 5000
     cerebro.broker.setcash(init_value)
 
     # Add a FixedSize sizer according to the stake
@@ -231,7 +231,6 @@ if __name__ == '__main__':
 
     mycommission = 0.001
     cerebro.broker.setcommission(commission=mycommission)
-    tstart = time.clock()
     strats = cerebro.run(tradehistory=True)
     cerebro.plot()
     # cerebro.plot(start=datetime.date(2015, 7, 20), end=datetime.date(2015, 8, 1))
@@ -241,7 +240,6 @@ if __name__ == '__main__':
     # stratruns = cerebro.run(tradehistory=True)
 
     # clock the end of the process
-    tend = time.clock()
 
     # print('==================================================')
     # for stratrun in stratruns:
@@ -250,6 +248,3 @@ if __name__ == '__main__':
     #         print('--------------------------------------------------')
     #         print(strat.p._getkwargs())
     # print('==================================================')
-
-    # print out the result
-    print('Time used:', str(tend - tstart))
